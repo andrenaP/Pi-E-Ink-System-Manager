@@ -1,0 +1,3 @@
+psutil
+pyte
+git+https://github.com/waveshareteam/e-Paper.git#egg=waveshare-epd&subdirectory=RaspberryPi_JetsonNano/python

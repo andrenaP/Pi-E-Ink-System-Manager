@@ -1,0 +1,12 @@
+# Ignore all text files
+*.txt
+
+# EXCEPT for this specific file
+!requirements.txt
+
+# Other ignores
+*.fb2
+*.state.json
+*.txt.cache
+__pycache__/
+*.py.tx

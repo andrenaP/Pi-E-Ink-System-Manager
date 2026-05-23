@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "E-Ink Sender Pro",
+  "version": "3.0",
+  "description": "Sends selected text or entire pages to your E-Ink reader.",
+  "permissions": ["contextMenus", "activeTab", "scripting"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "action": {
+    "default_title": "Send Full Page to E-Ink"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

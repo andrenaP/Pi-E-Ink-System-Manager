@@ -6,32 +6,24 @@ import sys
 import time
 import socket
 import psutil
+import select
+import termios
+import tty
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 
-# Setup Waveshare Paths
-libdir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'lib')
-if os.path.exists(libdir):
-    sys.path.append(libdir)
-
-from waveshare_epd import epd7in5_V2
-
 # Configuration
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-TIME_SIZE = 90  # Large clock
+TIME_SIZE = 90
 STAT_SIZE = 24
 
 class PrecisionDash:
-    def __init__(self):
-        self.epd = epd7in5_V2.EPD()
-        print("⚡ Waking screen...")
-        self.epd.init_fast() 
-        
+    def __init__(self, epd):
+        self.epd = epd  # Accept the screen from the menu!
         self.time_font = ImageFont.truetype(FONT_PATH, TIME_SIZE)
         self.stat_font = ImageFont.truetype(FONT_PATH, STAT_SIZE)
 
     def get_stats(self):
-        """Fetches system data."""
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
@@ -54,46 +46,46 @@ class PrecisionDash:
         }
 
     def update(self):
-        """Renders and displays the info."""
         data = self.get_stats()
         img = Image.new("1", (self.epd.width, self.epd.height), 255)
         draw = ImageDraw.Draw(img)
 
-        # Draw Big Time
         tw = draw.textbbox((0,0), data["time"], font=self.time_font)[2]
         draw.text(((self.epd.width - tw)//2, 80), data["time"], font=self.time_font, fill=0)
 
-        # Draw Date
         dw = draw.textbbox((0,0), data["date"], font=self.stat_font)[2]
         draw.text(((self.epd.width - dw)//2, 190), data["date"], font=self.stat_font, fill=0)
 
-        # Draw Stats Footer
         sw = draw.textbbox((0,0), data["stats"], font=self.stat_font)[2]
         draw.text(((self.epd.width - sw)//2, 330), data["stats"], font=self.stat_font, fill=0)
         draw.text((30, self.epd.height - 50), data["ip"], font=self.stat_font, fill=0)
 
-        print(f"🔄 Minute sync refresh at: {datetime.now().strftime('%H:%M:%S')}")
         self.epd.display(self.epd.getbuffer(img))
 
-    def run(self):
+# --- STANDARD ENTRY POINT ---
+def run_app(epd, *args):
+    dash = PrecisionDash(epd)
+    
+    # Switch to raw terminal input so we can detect 'q' to exit
+    old_settings = termios.tcgetattr(sys.stdin)
+    tty.setraw(sys.stdin)
+    
+    try:
         while True:
-            # 1. Update the screen at the start of the minute
-            self.update()
-
-            # 2. Calculate time until the EXACT start of the next minute
+            dash.update()
+            
+            # Wait for next minute, checking for 'q' every 0.1 seconds
             now = datetime.now()
-            # Seconds remaining + microseconds converted to seconds
             seconds_to_wait = 60 - now.second - (now.microsecond / 1000000.0)
             
-            # 3. Sleep until the clock strikes :00
-            # We add a tiny 0.1s buffer to ensure we don't trigger at :59.999
-            time.sleep(max(0, seconds_to_wait + 0.1))
-
-if __name__ == "__main__":
-    dash = PrecisionDash()
-    try:
-        dash.run()
-    except KeyboardInterrupt:
-        dash.epd.init()
-        dash.epd.Clear()
-        dash.epd.sleep()
+            quit_app = False
+            while seconds_to_wait > 0:
+                if sys.stdin in select.select([sys.stdin], [], [], 0.1)[0]:
+                    if sys.stdin.read(1).lower() == 'q':
+                        quit_app = True
+                        break
+                seconds_to_wait -= 0.1
+                
+            if quit_app: break
+    finally:
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
